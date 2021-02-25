@@ -633,6 +633,9 @@ void drawStaticScene(int hp, int weapon, int armor, int sources) {
 	std::string shipSpeed = stream.str();
 	printShop("Speed: ", 3, 3);
 	printShop(shipSpeed, 7, 3);
+
+	if(explode)
+		printShop("You lost! Press R to start over.", 42, 70);
 }
 
 void drawPlanets() {
@@ -808,6 +811,9 @@ void renderScene()
 	drawAsteroids();
 	if (isKaboom) {
 		asteroidGoesKaboom(kaboomAstPos);
+
+		//glm::vec3 astPos(kaboomAstPos[3]);
+		//generateGem(astPos.x, astPos.y, astPos.z);
 		//Sleep(200);
 		//isKaboom = false;
 	}
@@ -1050,8 +1056,9 @@ void click_mouse(int button, int state, int x, int y) {
 					kaboomAstPos = currentAstPos;
 					isKaboom = true;
 					asteroidsDestroyed++;
+					addCash();
 
-					generateGem(positionVec.x, positionVec.y, positionVec.z);
+					//generateGem(positionVec.x, positionVec.y, positionVec.z);
 
 					if (asteroidsDestroyed == 5)	asteroidAcceleration = 0.1f;
 					else if (asteroidsDestroyed == 10) asteroidAcceleration = 0.2f;
@@ -1098,7 +1105,7 @@ void keyboard(unsigned char key, int x, int y)
 	case 'r': {
 		explode = false;
 		canShoot = true;
-		amountHp = 4;
+		initStatic();
 		break; }
 	case '1': upEngines(); break;
 	case '2': upArmor(); break;
