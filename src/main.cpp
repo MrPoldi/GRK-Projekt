@@ -62,6 +62,8 @@ Core::RenderContext asteroidContext;
 const float RADIUS = 100.f;
 const int ASTEROIDS_NUMBER = 100;
 int ACTUAL_ASTEROIDS_NUMBER = 0;
+float asteroidAcceleration = 0.05f;
+int asteroidsDestroyed = 0;
 
 std::vector<GLuint> asteroidTextures;
 std::vector<obj::Model> asteroidModels;
@@ -115,6 +117,9 @@ void speedUp() {
 	if (acceleration < maxSpeed) {
 		acceleration += accelerationSpeed;
 	}
+	else {
+		acceleration = maxSpeed;
+	}
 	PxVec3 velocity = PxVec3(cameraDir.x, cameraDir.y, cameraDir.z) * acceleration;
 	shipBody->setLinearVelocity(velocity);
 }
@@ -155,6 +160,8 @@ void disableEngines() {
 	}
 }
 
+bool canShoot = true;
+
 void onHit() {
 	switch (amountArmor) {
 		case 1: {
@@ -180,6 +187,8 @@ void onHit() {
 	if(amountHp <= 0) {
 		amountHp = 0;
 		explode = true; 
+		acceleration = 0;
+		canShoot = false;
 		particleEmitter_ShipExplode = new ParticleEmitterTex(&programTextureParticle, 2000, 0.05f, explosionTexture); 
 		disableEngines();
 	}
@@ -522,6 +531,7 @@ void keyboard(unsigned char key, int x, int y)
 	//case 'e': explode = true; particleEmitter_ShipExplode = new ParticleEmitterTex(&programTextureParticle, 2000, 0.05, explosionTexture); disableEngines(); break;
 	case 'r':{
 		explode = false;
+		canShoot = true;
 		amountHp = 4;
 		break; }
 	case '1': upEngines(); break;
@@ -558,15 +568,9 @@ std::vector<glm::vec3> calculate_ray(float x, float y) {
 std::vector<glm::vec3> ray;
 
 void updateRay() {
-	//int size_x = glutGet(GLUT_WINDOW_WIDTH);
-	//int size_y = glutGet(GLUT_WINDOW_HEIGHT);
-	//float x = shipBody->getGlobalPose().p.x;
-	//float y = shipBody->getGlobalPose().p.y;
-
 	float x = 0.f;
 	float y = 0.f;
 
-	//ray = calculate_ray((x / float(size_x)), ((y / float(size_y))));
 	ray = calculate_ray(x, y);
 	Core::updateRayPos(rayContext, ray);
 }
@@ -610,7 +614,7 @@ void click_mouse(int button, int state, int x, int y) {
 		pxScene.scene->raycast(vec3ToPxVec(ray[0]), vec3ToPxVec(ray[1]), 1000, hit);
 		
 		//check if there is a hit
-		if (hit.hasAnyHits()) {
+		if (hit.hasAnyHits() && canShoot) {
 			PxRaycastHit block = hit.block;
 			//check if it is rigid dynamic
 			if (block.actor->getType() == PxActorType::eRIGID_DYNAMIC) {
@@ -627,7 +631,11 @@ void click_mouse(int button, int state, int x, int y) {
 					particleEmitter_AstExplode = new ParticleEmitterTex(&programTextureParticle, 2500, 0.7f, explosionTexture);
 					kaboomAstPos = currentAstPos;
 					isKaboom = true;
-					
+					asteroidsDestroyed++;
+					if (asteroidsDestroyed == 5)	asteroidAcceleration = 0.1f;
+					else if (asteroidsDestroyed == 10) asteroidAcceleration = 0.2f;
+					else if (asteroidsDestroyed == 20) asteroidAcceleration = 0.3f;
+					else if (asteroidsDestroyed == 50) asteroidAcceleration = 0.5f;
 
 				}
 				else actorName = " else";
@@ -831,6 +839,12 @@ void drawStaticScene(int hp, int weapon, int armor, int sources) {
 	std::string src = std::to_string(sources);
 	printShop(src, 94, 94);
 	printShop("> <", 49, 48);
+
+	std::stringstream stream;
+	stream << std::fixed << std::setprecision(1) << acceleration;
+	std::string shipSpeed = stream.str();
+	printShop("Speed: ", 3, 3);
+	printShop(shipSpeed, 7, 3);
 }
 
 void drawPlanets() {
@@ -869,7 +883,6 @@ void setSpotLight() {
 }
 
 
-
 void drawAsteroids() {
 
 	for (int i = 0; i < renderablesAsteroids.size(); i++) {
@@ -887,7 +900,7 @@ void drawAsteroids() {
 			glm::mat4 transformation = glm::translate(transformationVector);
 			asteroidsBodies[i]->setGlobalPose(PxTransform(transformationVector.x, transformationVector.y, transformationVector.z));
 			currentAstPos = PxVec3(transformationVector.x, transformationVector.y, transformationVector.z);
-			asteroidsBodies[i]->setLinearVelocity(PxVec3(PxVec3(astVelocityVector.x, astVelocityVector.y, astVelocityVector.z) - currentAstPos)* .1f);
+			asteroidsBodies[i]->setLinearVelocity(PxVec3(PxVec3(astVelocityVector.x, astVelocityVector.y, astVelocityVector.z) - currentAstPos) * asteroidAcceleration);
 			drawObjectTextureFromContext(renderablesAsteroids[i]->context, transformation, renderablesAsteroids[i]->textureId);
 		}
 		else {
@@ -998,7 +1011,7 @@ void renderScene()
 	}
 
 	
-	if (isShooting) {
+	if (isShooting && canShoot) {
 		updateRay();
 		drawRay(rayContext);
 	}	
@@ -1116,7 +1129,9 @@ int main(int argc, char ** argv)
 {
 	srand(time(NULL));
 	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
+	glutSetOption(GLUT_MULTISAMPLE, 8);
+	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA | GLUT_MULTISAMPLE);
+	glEnable(GL_MULTISAMPLE);
 	glutInitWindowPosition(200, 200);
 	glutInitWindowSize(windowWidth, windowHeight);
 	winHandle = glutCreateWindow("Space shitter");
