@@ -74,11 +74,13 @@ float asteroidAcceleration = 0.05f;
 int asteroidsDestroyed = 0;
 glm::mat4 kaboomAstPos;
 bool isKaboom = false;
+bool shouldGemBeAdd = false;
 
 Core::Shader_Loader shaderLoader;
 obj::Model shipModel, sphereModel, gemModel;
 std::vector<PxRigidDynamic*> asteroidsBodies;
 std::vector<glm::vec3> astPositions;
+std::vector<glm::vec3> gemPositions;
 
 // textures
 
@@ -327,21 +329,22 @@ glm::vec3 PxVecTovec3(PxVec3 vector) {
 	return glm::vec3(vector.x, vector.y, vector.z);
 }
 
-void generateGem(float x, float y, float z) {
-
-	Renderable* gem = new Renderable();
-	gem->context = &gemContext;
-	gem->textureId = textureGem;
-	renderables.emplace_back(gem);
-
-	gemMaterial = pxScene.physics->createMaterial(1, 1, 1);
-	gemBody = pxScene.physics->createRigidStatic(PxTransform(x, y, z));
-	PxShape* gemShape = pxScene.physics->createShape(PxBoxGeometry(1, 1, 1), *gemMaterial);
-	gemBody->attachShape(*gemShape);
-	gemShape->release();
-	gemBody->userData = gem;
-	pxScene.scene->addActor(*gemBody);
-}
+//void generateGem(float x, float y, float z) {
+//
+//	Renderable* gem = new Renderable();
+//	gem->context = &gemContext;
+//	gem->textureId = textureGem;
+//	renderables.emplace_back(gem);
+//
+//	gemMaterial = pxScene.physics->createMaterial(1, 1, 1);
+//	gemBody = pxScene.physics->createRigidStatic(PxTransform(x, y, z));
+//	PxShape* gemShape = pxScene.physics->createShape(PxBoxGeometry(1, 1, 1), *gemMaterial);
+//	gemBody->attachShape(*gemShape);
+//	gemShape->release();
+//	gemBody->setName("gem");
+//	gemBody->userData = gem;
+//	pxScene.scene->addActor(*gemBody);
+//}
 
 void upArmor() {
 
@@ -373,7 +376,7 @@ void upArmor() {
 }
 
 void upEngines() {
-
+	
 	if (amountEngines < 4) {
 
 		int currentBalance = amountSources;
@@ -632,10 +635,15 @@ void drawStaticScene(int hp, int weapon, int armor, int sources) {
 	stream << std::fixed << std::setprecision(1) << acceleration;
 	std::string shipSpeed = stream.str();
 	printShop("Speed: ", 3, 3);
-	printShop(shipSpeed, 7, 3);
+	printShop(shipSpeed, 8, 3);
 
-	if(explode)
+	if (explode) {
 		printShop("You lost! Press R to start over.", 42, 70);
+		asteroidAcceleration = 0.05f;
+		maxSpeed = 10.f;
+		accelerationSpeed = 0.1f;
+	}
+		
 }
 
 void drawPlanets() {
@@ -792,17 +800,16 @@ void renderScene()
 	}
 
 	// gems
-	for (int i = 1; i < renderables.size(); i++) {
+	for (int i = 0; i < gemPositions.size(); i++) {
+		glm::mat4 transformation = glm::translate(gemPositions[i]);
+		drawObjectTexture(&gemModel, transformation*glm::scale(glm::vec3(0.2)), textureGem);
+		PxVec3 position = shipBody->getGlobalPose().p;
+		glm::vec3 shipPosVector = glm::vec3(position.x, position.y, position.z);
+		glm::vec3 gemPos = gemPositions[i];
+		float distance = glm::distance(gemPos, shipPosVector);
 
-		glm::mat4 transformation = renderables[i]->modelMatrix;
-		drawObjectTextureFromContext(renderables[i]->context, transformation, renderables[i]->textureId);
-
-		glm::vec3 position = cameraPos;
-		PxVec3 gemPos = gemBody->getGlobalPose().p;
-		float distance = glm::distance(glm::vec3(position.x, position.y, position.z), glm::vec3(gemPos.x, gemPos.y, gemPos.z));
-
-		if (distance < 5.f) {
-			renderables.erase(renderables.begin() + i);
+		if (distance < 2.f) {
+			gemPositions.erase(gemPositions.begin() + i);
 			addCash();
 		}
 	}
@@ -811,11 +818,6 @@ void renderScene()
 	drawAsteroids();
 	if (isKaboom) {
 		asteroidGoesKaboom(kaboomAstPos);
-
-		//glm::vec3 astPos(kaboomAstPos[3]);
-		//generateGem(astPos.x, astPos.y, astPos.z);
-		//Sleep(200);
-		//isKaboom = false;
 	}
 
 	//planets
@@ -1025,7 +1027,7 @@ void click_mouse(int button, int state, int x, int y) {
 	if ((GLUT_LEFT_BUTTON == button && state == GLUT_DOWN)) {
 
 		isShooting = true;
-
+		
 		updateRay();
 
 		//here raycast should be done
@@ -1036,6 +1038,7 @@ void click_mouse(int button, int state, int x, int y) {
 		if (hit.hasAnyHits() && canShoot) {
 			PxRaycastHit block = hit.block;
 			//check if it is rigid dynamic
+			PxVec3 trueAstPos = block.actor->getGlobalPose().p;
 			if (block.actor->getType() == PxActorType::eRIGID_DYNAMIC) {
 				PxRigidDynamic* actor = (PxRigidDynamic*)block.actor;
 				Renderable* actorRenderable = (Renderable*)actor->userData;
@@ -1054,7 +1057,9 @@ void click_mouse(int button, int state, int x, int y) {
 					actor->setLinearVelocity(vec3ToPxVec(cameraDir * 500));
 					particleEmitter_AstExplode = new ParticleEmitterTex(&programTextureParticle, 2500, 0.7f, explosionTexture);
 					kaboomAstPos = currentAstPos;
+					gemPositions.push_back(glm::vec3(trueAstPos.x, trueAstPos.y, trueAstPos.z));
 					isKaboom = true;
+					shouldGemBeAdd = true;
 					asteroidsDestroyed++;
 					addCash();
 
